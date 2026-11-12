@@ -1,0 +1,47 @@
+# Astro CLI merges this file with its own docker-compose.yml on `astro dev start`.
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-admin123}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db          # persistent storage
+      - mongo_config:/data/configdb
+    networks:
+      - airflow                      # docker networking (shared with Airflow containers)
+    labels:
+      com.etl.network: "airflow"
+      com.etl.storage: "mongo_data -> /data/db"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: mongo-express
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin123}@mongo:27017/?authSource=admin
+      ME_CONFIG_BASICAUTH_USERNAME: ${ME_USER:-admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ME_PASSWORD:-admin123}
+    ports:
+      - "8081:8081"
+    networks:
+      - airflow
+    labels:
+      com.etl.network: "airflow"
+      com.etl.depends_on: "mongo"
+
+volumes:
+  mongo_data:
+  mongo_config:
